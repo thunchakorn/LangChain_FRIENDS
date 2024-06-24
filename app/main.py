@@ -7,7 +7,8 @@ from langchain import hub
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
 from langchain_community.vectorstores import Chroma
-from langchain_openai import OpenAIEmbeddings, ChatOpenAI
+from langchain_community.embeddings import GPT4AllEmbeddings
+from langchain_community.chat_models import ChatOllama
 
 from . import settings
 
@@ -29,14 +30,15 @@ app.add_middleware(
 
 
 retriever = Chroma(
-    embedding_function=OpenAIEmbeddings(), persist_directory="./chroma_db"
+    embedding_function=GPT4AllEmbeddings(model_name="nomic-embed-text-v1.5.f16.gguf"),
+    persist_directory="./chroma_db",
 ).as_retriever()
 
 # Prompt
 prompt = hub.pull("rlm/rag-prompt")
 
 # LLM
-llm = ChatOpenAI(model_name="gpt-3.5-turbo", temperature=0)
+llm = ChatOllama(model="llama3", temperature=0)
 
 
 # Post-processing

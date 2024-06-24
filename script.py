@@ -4,7 +4,7 @@ import requests
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import WebBaseLoader
 from langchain_community.vectorstores import Chroma
-from langchain_openai import OpenAIEmbeddings
+from langchain_community.embeddings import GPT4AllEmbeddings
 
 base_url = "https://friends.fandom.com"
 
@@ -16,11 +16,14 @@ site_map_paths = [
     "/wiki/Local_Sitemap?namefrom=The+One+With+Ross%27+Library+Book",
 ]
 
-ignore_categories = ["joey"]
-# ignore_page_keyword = "admin"
-
 text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
-    chunk_size=1000, chunk_overlap=200
+    chunk_size=500, chunk_overlap=100
+)
+
+vectorstore = Chroma(
+    embedding_function=GPT4AllEmbeddings(model_name="nomic-embed-text-v1.5.f16.gguf"),
+    persist_directory="./chroma_db",
+    collection_name="wiki",
 )
 
 
@@ -34,7 +37,7 @@ def scape_page(url, title):
     soup = bs4.BeautifulSoup(site.content, features="html.parser")
     categories = get_page_categories(soup)
 
-    if "joey" in categories:
+    if "joey" in categories:  # ignore joey tv show
         return
 
     loader = WebBaseLoader(
@@ -50,11 +53,13 @@ def scape_page(url, title):
         doc.metadata["title"] = title
         # doc.metadata["tags"] = categories
 
+        with open(f"./wiki/{title.replace('/', '_')}.txt", "w") as f:
+            f.write(doc.page_content)
+
     return docs
 
 
 def scrape_site_map(url):
-    docs = []
     site = requests.get(url)
     soup = bs4.BeautifulSoup(site.content, features="html.parser")
     anchor_tags = soup.find("div", class_="mw-allpages-body").find_all("a")
@@ -70,19 +75,12 @@ def scrape_site_map(url):
         if page_docs is None:
             continue
         splits = text_splitter.split_documents(page_docs)
-        docs.extend(splits)
-
-    return docs
+        vectorstore.add_documents(splits)
 
 
 def main():
-    docs = []
     for site_map_path in site_map_paths:
-        docs.extend(scrape_site_map(base_url + site_map_path))
-
-    vectorstore = Chroma.from_documents(
-        documents=docs, embedding=OpenAIEmbeddings(), persist_directory="./chroma_db"
-    )
+        scrape_site_map(base_url + site_map_path)
 
 
 if __name__ == "__main__":
